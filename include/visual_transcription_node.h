@@ -34,10 +34,14 @@ class visual_transcription : public rclcpp::Node
             this->declare_parameter<std::string>("clock", "steady-clock");
             this->declare_parameter<std::string>("msg_type", "pose");
             this->declare_parameter<std::string>("uav_prefix", "fmu");
+            this->declare_parameter<int>("rate", 20);
             this->get_parameter("frame", _frame);
             this->get_parameter("clock", _clock);
             this->get_parameter("msg_type", _msg_type);
             this->get_parameter("uav_prefix", _uav_prefix);
+            this->get_parameter("rate", _rate);
+
+            _interval_milliseconds = (int)round((1 / _rate) * 1000); 
 
             _visual_odometry_publisher = 
                 this->create_publisher<px4_msgs::msg::VehicleVisualOdometry>
@@ -60,15 +64,24 @@ class visual_transcription : public rclcpp::Node
                 return;
 
             // https://github.com/chengguizi/basalt-mirror/blob/master/src/ros_live_vio.cpp#L297
-            R_nwu_ned <<
-                1, 0, 0,
-                0, -1, 0,
-                0, 0, -1;
-            
-            R_enu_ned <<
-                0, 1, 0,
-                1, 0, 0,
-                0, 0, -1;
+            if (_frame.compare("nwu") == 0) // nwu to ned
+                R << 1, 0, 0,
+                    0, -1, 0,
+                    0, 0, -1;
+            else if (_frame.compare("enu") == 0) // enu to ned
+                R << 0, 1, 0,
+                    1, 0, 0,
+                    0, 0, -1;
+            else if (_frame.compare("ned") == 0) // enu to ned
+                R << 1, 0, 0,
+                    0, 1, 0,
+                    0, 0, 1;
+            else
+            {
+                RCLCPP_ERROR(this->get_logger(), "Sorry, frame %s not supported", _frame.c_str());
+                return;
+            } 
+
         }
     
     private:
@@ -87,6 +100,8 @@ class visual_transcription : public rclcpp::Node
         std::atomic<double> _timestamp_est_offset;
         std::atomic<double> _message_latency;
 
+        int _rate, _interval_milliseconds;
+
         std::string _frame, _clock, _msg_type, _uav_prefix;
 
         Eigen::Affine3d visual_pose;
@@ -95,9 +110,9 @@ class visual_transcription : public rclcpp::Node
 
         std::chrono::time_point<std::chrono::steady_clock> timestamp_offset_start;
 
-        std::mutex timestamp_mutex;
+        std::mutex timestamp_mutex, pose_mutex;
 
-        Eigen::Matrix3d R_enu_ned, R_nwu_ned;
+        Eigen::Matrix3d R;
 
         void visual_pose_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
         

@@ -3,6 +3,8 @@
 void visual_transcription::visual_pose_callback(
     const geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
+    std::lock_guard<std::mutex> visual_pose_lock(pose_mutex);
+    
     // RCLCPP_INFO(this->get_logger(), " ", );
     visual_pose.translation() = Eigen::Vector3d(
         msg->pose.position.x, 
@@ -15,12 +17,16 @@ void visual_transcription::visual_pose_callback(
         msg->pose.orientation.x, 
         msg->pose.orientation.y,
         msg->pose.orientation.z).toRotationMatrix();
-
+    
+    visual_pose.translation() = R * visual_pose.translation();
+    visual_pose.linear() = R * visual_pose.linear() * R.inverse();
 }
 
 void visual_transcription::visual_odom_callback(
     const nav_msgs::msg::Odometry::SharedPtr msg)
 {
+    std::lock_guard<std::mutex> visual_pose_lock(pose_mutex);
+
     // RCLCPP_INFO(this->get_logger(), " ", );
     visual_pose.translation() = Eigen::Vector3d(
         msg->pose.pose.position.x, 
@@ -32,6 +38,10 @@ void visual_transcription::visual_odom_callback(
         msg->pose.pose.orientation.x, 
         msg->pose.pose.orientation.y,
         msg->pose.pose.orientation.z).toRotationMatrix();
+
+
+    visual_pose.translation() = R * visual_pose.translation();
+    visual_pose.linear() = R * visual_pose.linear() * R.inverse();
 }
 
 /** @brief Subscribe to timesync message **/
@@ -39,6 +49,7 @@ void visual_transcription::timesync_callback(
     const px4_msgs::msg::Timesync::SharedPtr msg)
 {
     std::lock_guard<std::mutex> timestamp_lock(timestamp_mutex);
+
     _timestamp.store(msg->timestamp);
     
     timestamp_offset_start = std::chrono::steady_clock::now();
@@ -57,6 +68,7 @@ void visual_transcription::timesync_status_callback(
 int32_t visual_transcription::update_duration_with_offset()
 {
     std::lock_guard<std::mutex> timestamp_lock(timestamp_mutex);
+
     auto tstamp = std::chrono::steady_clock::now() - timestamp_offset_start;
     int32_t nsec = std::chrono::duration_cast<std::chrono::milliseconds>(tstamp).count();
     return nsec;
@@ -64,6 +76,8 @@ int32_t visual_transcription::update_duration_with_offset()
 
 void visual_transcription::publish_timer()
 {
+    std::lock_guard<std::mutex> visual_pose_lock(pose_mutex);
+
     Eigen::Quaterniond q(visual_pose.linear());
 
     int32_t current_time_offset = update_duration_with_offset();
@@ -160,7 +174,7 @@ bool visual_transcription::setup_subscriber_and_timer(
             if (ret_take) {
                 RCLCPP_INFO(this->get_logger(), "Heard visual_message, initializing timer now");
                 _timer = this->create_wall_timer(
-                    25ms, std::bind(&visual_transcription::publish_timer, this));                
+                    std::chrono::milliseconds(_interval_milliseconds), std::bind(&visual_transcription::publish_timer, this));                
             } 
             else {
                 RCLCPP_ERROR(this->get_logger(), "No message recieved from visual node");
@@ -181,7 +195,7 @@ bool visual_transcription::setup_subscriber_and_timer(
             if (ret_take) {
                 RCLCPP_INFO(this->get_logger(), "Heard visual_message, initializing timer now");
                 _timer = this->create_wall_timer(
-                    25ms, std::bind(&visual_transcription::publish_timer, this));
+                    std::chrono::milliseconds(_interval_milliseconds), std::bind(&visual_transcription::publish_timer, this));
             } 
             else {
                 RCLCPP_ERROR(this->get_logger(), "No message recieved from visual node");
