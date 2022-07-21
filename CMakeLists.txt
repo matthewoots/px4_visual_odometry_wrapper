@@ -3,12 +3,12 @@ project(px4_visual)
 set(CMAKE_CXX_STANDARD 14)
 
 # find dependencies
+find_package(rclcpp REQUIRED)
 find_package(ament_cmake REQUIRED)
 find_package(px4_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(tf2 REQUIRED)
-find_package(tf2_ros REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3)
 
@@ -20,9 +20,8 @@ ament_target_dependencies(${PROJECT_NAME}_node
    rclcpp 
    px4_msgs 
    std_msgs 
+   nav_msgs
    geometry_msgs 
-   tf2 
-   tf2_ros 
    Eigen3)
 
 target_include_directories(${PROJECT_NAME}_node
@@ -31,7 +30,12 @@ target_include_directories(${PROJECT_NAME}_node
      $<INSTALL_INTERFACE:include>)
 
 install(TARGETS
-    ${PROJECT_NAME}_node
-    DESTINATION lib/${PROJECT_NAME})
+   ${PROJECT_NAME}_node
+   DESTINATION lib/${PROJECT_NAME})
+
+# Install launch file
+install(DIRECTORY 
+   launch
+   DESTINATION share/${PROJECT_NAME}/)
 
 ament_package()
